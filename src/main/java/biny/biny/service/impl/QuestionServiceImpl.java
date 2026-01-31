@@ -55,6 +55,7 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question>
         String judgeCase = question.getJudgeCase();
         String sampleCase = question.getSampleCase();
         String judgeConfig = question.getJudgeConfig();
+        Integer difficulty = question.getDifficulty();
         // 创建时，参数不能为空
         if (add) {
             ThrowUtils.throwIf(StringUtils.isAnyBlank(title, content, tags), ErrorCode.PARAMS_ERROR);
@@ -78,6 +79,9 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question>
         if (StringUtils.isNotBlank(judgeConfig) && judgeConfig.length() > 8192) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "判题配置过长");
         }
+        if (difficulty != null && (difficulty < 1 || difficulty > 3)) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "难度不合法");
+        }
     }
 
     /**
@@ -94,6 +98,7 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question>
         }
         Long id = questionQueryRequest.getId();
         Integer questionNumber = questionQueryRequest.getQuestionNumber();
+        Integer difficulty = questionQueryRequest.getDifficulty();
         String title = questionQueryRequest.getTitle();
         String content = questionQueryRequest.getContent();
         List<String> tags = questionQueryRequest.getTags();
@@ -113,6 +118,7 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question>
         }
         queryWrapper.eq(ObjectUtils.isNotEmpty(id), "id", id);
         queryWrapper.eq(ObjectUtils.isNotEmpty(questionNumber), "questionNumber", questionNumber);
+        queryWrapper.eq(ObjectUtils.isNotEmpty(difficulty), "difficulty", difficulty);
         queryWrapper.eq(ObjectUtils.isNotEmpty(userId), "userId", userId);
         queryWrapper.eq("isDelete", false);
         queryWrapper.orderBy(SqlUtils.validSortField(sortField), sortOrder.equals(CommonConstant.SORT_ORDER_ASC),

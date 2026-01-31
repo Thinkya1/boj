@@ -55,6 +55,7 @@ public class QuestionController {
      * @return
      */
     @PostMapping("/add")
+    @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
     public BaseResponse<Long> addQuestion(@RequestBody QuestionAddRequest questionAddRequest, HttpServletRequest request) {
         if (questionAddRequest == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
@@ -76,6 +77,9 @@ public class QuestionController {
         JudgeConfig judgeConfig = questionAddRequest.getJudgeConfig();
         if (judgeConfig != null) {
             question.setJudgeConfig(GSON.toJson(judgeConfig));
+        }
+        if (question.getDifficulty() == null) {
+            question.setDifficulty(1);
         }
         questionService.validQuestion(question, true);
         User loginUser = userService.getLoginUser(request);
@@ -146,12 +150,15 @@ public class QuestionController {
         if (judgeConfig != null) {
             question.setJudgeConfig(GSON.toJson(judgeConfig));
         }
-        // 参数校验
-        questionService.validQuestion(question, false);
         long id = questionUpdateRequest.getId();
         // 判断是否存在
         Question oldQuestion = questionService.getById(id);
         ThrowUtils.throwIf(oldQuestion == null, ErrorCode.NOT_FOUND_ERROR);
+        if (questionUpdateRequest.getAnswer() == null) {
+            question.setAnswer(oldQuestion.getAnswer());
+        }
+        // 参数校验
+        questionService.validQuestion(question, false);
         boolean result = questionService.updateById(question);
         return ResultUtils.success(result);
     }
@@ -290,13 +297,16 @@ public class QuestionController {
         if (judgeConfig != null) {
             question.setJudgeConfig(GSON.toJson(judgeConfig));
         }
-        // 参数校验
-        questionService.validQuestion(question, false);
-        User loginUser = userService.getLoginUser(request);
         long id = questionEditRequest.getId();
         // 判断是否存在
         Question oldQuestion = questionService.getById(id);
         ThrowUtils.throwIf(oldQuestion == null, ErrorCode.NOT_FOUND_ERROR);
+        if (questionEditRequest.getAnswer() == null) {
+            question.setAnswer(oldQuestion.getAnswer());
+        }
+        // 参数校验
+        questionService.validQuestion(question, false);
+        User loginUser = userService.getLoginUser(request);
         // 仅本人或管理员可编辑
         if (!oldQuestion.getUserId().equals(loginUser.getId()) && !userService.isAdmin(loginUser)) {
             throw new BusinessException(ErrorCode.NO_AUTH_ERROR);

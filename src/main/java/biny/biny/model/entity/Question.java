@@ -25,6 +25,11 @@ public class Question implements Serializable {
     private Integer questionNumber;
 
     /**
+     * 难度（1-简单 2-中等 3-困难）
+     */
+    private Integer difficulty;
+
+    /**
      * 标题
      */
     private String title;

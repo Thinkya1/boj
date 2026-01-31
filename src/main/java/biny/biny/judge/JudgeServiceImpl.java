@@ -9,8 +9,13 @@ import biny.biny.judge.codesandbox.CodeSandboxFactory;
 import biny.biny.judge.codesandbox.CodeSandboxProxy;
 import biny.biny.judge.codesandbox.model.ExecuteCodeRequest;
 import biny.biny.judge.codesandbox.model.ExecuteCodeResponse;
+import biny.biny.judge.codesandbox.model.JudgeCaseResult;
 import biny.biny.judge.codesandbox.model.JudgeInfo;
+import biny.biny.judge.codesandbox.model.SpjCheckResult;
+import biny.biny.judge.spj.SpjCheckerService;
+import biny.biny.config.SpjConfig;
 import biny.biny.judge.strategy.JudgeContext;
+import biny.biny.model.dto.question.JudgeConfig;
 import biny.biny.model.dto.question.JudgeCase;
 import biny.biny.model.dto.questionsubmit.QuestionSubmitAddRequest;
 import biny.biny.model.entity.Question;
@@ -21,10 +26,10 @@ import biny.biny.model.enums.QuestionSubmitStatusEnum;
 import biny.biny.service.QuestionService;
 import biny.biny.service.QuestionSubmitService;
 import biny.biny.utils.MemoryUnitUtil;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
-import javax.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -35,17 +40,26 @@ import org.springframework.stereotype.Service;
 @Slf4j
 public class JudgeServiceImpl implements JudgeService {
 
-    @Resource
-    private QuestionSubmitService questionSubmitService;
+    private final QuestionSubmitService questionSubmitService;
 
-    @Resource
-    private QuestionService questionService;
+    private final QuestionService questionService;
 
     @Value("${codesandbox.type:example}")
     private String type;
 
-    @Resource
-    private JudgeManager judgeManager;
+    private final JudgeManager judgeManager;
+
+    private final SpjCheckerService spjCheckerService;
+
+    public JudgeServiceImpl(QuestionSubmitService questionSubmitService,
+                            QuestionService questionService,
+                            JudgeManager judgeManager,
+                            SpjCheckerService spjCheckerService) {
+        this.questionSubmitService = questionSubmitService;
+        this.questionService = questionService;
+        this.judgeManager = judgeManager;
+        this.spjCheckerService = spjCheckerService;
+    }
 
     @Override
     public QuestionSubmit doJudge(long questionSubmitId) {
@@ -97,14 +111,7 @@ public class JudgeServiceImpl implements JudgeService {
             normalizeMemoryUnit(executeCodeResponse);
 
             // 5) 判题策略生成结果
-            JudgeContext judgeContext = new JudgeContext();
-            judgeContext.setJudgeInfo(executeCodeResponse.getJudgeInfo());
-            judgeContext.setInputList(inputList);
-            judgeContext.setOutputList(executeCodeResponse.getOutputList());
-            judgeContext.setJudgeCaseList(judgeCaseList);
-            judgeContext.setQuestion(question);
-            judgeContext.setQuestionSubmit(questionSubmit);
-            JudgeInfo judgeInfo = judgeManager.doJudge(judgeContext);
+            JudgeInfo judgeInfo = buildJudgeInfo(executeCodeResponse, question, questionSubmit, inputList, judgeCaseList);
 
             // 6) 落库判题结果（幂等）
             String message = judgeInfo.getMessage();
@@ -209,14 +216,7 @@ public class JudgeServiceImpl implements JudgeService {
         }
         QuestionSubmit questionSubmit = new QuestionSubmit();
         questionSubmit.setLanguage(languageEnum.getValue());
-        JudgeContext judgeContext = new JudgeContext();
-        judgeContext.setJudgeInfo(executeCodeResponse.getJudgeInfo());
-        judgeContext.setInputList(inputList);
-        judgeContext.setOutputList(executeCodeResponse.getOutputList());
-        judgeContext.setJudgeCaseList(sampleCaseList);
-        judgeContext.setQuestion(question);
-        judgeContext.setQuestionSubmit(questionSubmit);
-        JudgeInfo judgeInfo = judgeManager.doJudge(judgeContext);
+        JudgeInfo judgeInfo = buildJudgeInfo(executeCodeResponse, question, questionSubmit, inputList, sampleCaseList);
         executeCodeResponse.setJudgeInfo(judgeInfo);
         JudgeInfoMessageEnum messageEnum = getJudgeInfoMessageEnum(judgeInfo.getMessage());
         if (JudgeInfoMessageEnum.ACCEPTED.equals(messageEnum)) {
@@ -240,6 +240,89 @@ public class JudgeServiceImpl implements JudgeService {
         if ("remote".equalsIgnoreCase(type)) {
             judgeInfo.setMemory(MemoryUnitUtil.bytesToKb(memory));
         }
+    }
+
+    private JudgeInfo buildJudgeInfo(ExecuteCodeResponse executeCodeResponse,
+                                     Question question,
+                                     QuestionSubmit questionSubmit,
+                                     List<String> inputList,
+                                     List<JudgeCase> judgeCaseList) {
+        JudgeInfo baseInfo = executeCodeResponse.getJudgeInfo();
+        String judgeConfigStr = question == null ? null : question.getJudgeConfig();
+        boolean spjEnabled = spjCheckerService.isSpjEnabled(judgeConfigStr);
+        log.info("SPJ enabled={}, questionId={}, judgeConfig={}",
+                spjEnabled,
+                question == null ? null : question.getId(),
+                StringUtils.isBlank(judgeConfigStr) ? "<empty>" : judgeConfigStr);
+        if (spjEnabled) {
+            JudgeInfoMessageEnum limitEnum = checkLimit(baseInfo, judgeConfigStr);
+            if (limitEnum != null) {
+                return buildLimitResult(baseInfo, limitEnum, judgeCaseList == null ? 0 : judgeCaseList.size());
+            }
+            SpjConfig spjConfig = spjCheckerService.parseSpjConfig(judgeConfigStr);
+            log.info("SPJ config: compareUnit={}, ignoreOrder={}, floatEps={}",
+                    spjConfig.getCompareUnit(), spjConfig.getIgnoreOrder(), spjConfig.getFloatEps());
+            SpjCheckResult spjResult = spjCheckerService.check(spjConfig, judgeCaseList,
+                    executeCodeResponse.getOutputList());
+            log.info("SPJ result: accepted={}, cases={}",
+                    spjResult.isAccepted(),
+                    spjResult.getCaseResults() == null ? 0 : spjResult.getCaseResults().size());
+            JudgeInfo judgeInfo = new JudgeInfo();
+            judgeInfo.setMemory(baseInfo.getMemory());
+            judgeInfo.setTime(baseInfo.getTime());
+            judgeInfo.setCaseResults(spjResult.getCaseResults());
+            judgeInfo.setMessage(spjResult.isAccepted()
+                    ? JudgeInfoMessageEnum.ACCEPTED.getValue()
+                    : JudgeInfoMessageEnum.WRONG_ANSWER.getValue());
+            return judgeInfo;
+        }
+        JudgeContext judgeContext = new JudgeContext();
+        judgeContext.setJudgeInfo(baseInfo);
+        judgeContext.setInputList(inputList);
+        judgeContext.setOutputList(executeCodeResponse.getOutputList());
+        judgeContext.setJudgeCaseList(judgeCaseList);
+        judgeContext.setQuestion(question);
+        judgeContext.setQuestionSubmit(questionSubmit);
+        return judgeManager.doJudge(judgeContext);
+    }
+
+    private JudgeInfoMessageEnum checkLimit(JudgeInfo judgeInfo, String judgeConfigStr) {
+        if (judgeInfo == null || StringUtils.isBlank(judgeConfigStr)) {
+            return null;
+        }
+        JudgeConfig judgeConfig;
+        try {
+            judgeConfig = JSONUtil.toBean(judgeConfigStr, JudgeConfig.class);
+        } catch (Exception e) {
+            return null;
+        }
+        Long needMemoryLimit = judgeConfig.getMemoryLimit();
+        Long needTimeLimit = judgeConfig.getTimeLimit();
+        Long memory = judgeInfo.getMemory();
+        Long time = judgeInfo.getTime();
+        if (memory != null && needMemoryLimit != null && memory > needMemoryLimit) {
+            return JudgeInfoMessageEnum.MEMORY_LIMIT_EXCEEDED;
+        }
+        if (time != null && needTimeLimit != null && time > needTimeLimit) {
+            return JudgeInfoMessageEnum.TIME_LIMIT_EXCEEDED;
+        }
+        return null;
+    }
+
+    private JudgeInfo buildLimitResult(JudgeInfo baseInfo, JudgeInfoMessageEnum limitEnum, int caseCount) {
+        JudgeInfo judgeInfo = new JudgeInfo();
+        judgeInfo.setMemory(baseInfo.getMemory());
+        judgeInfo.setTime(baseInfo.getTime());
+        judgeInfo.setMessage(limitEnum.getValue());
+        List<JudgeCaseResult> caseResults = new ArrayList<>();
+        for (int i = 0; i < caseCount; i++) {
+            JudgeCaseResult caseResult = new JudgeCaseResult();
+            caseResult.setIndex(i + 1);
+            caseResult.setStatus(limitEnum == JudgeInfoMessageEnum.TIME_LIMIT_EXCEEDED ? "TLE" : "MLE");
+            caseResults.add(caseResult);
+        }
+        judgeInfo.setCaseResults(caseResults);
+        return judgeInfo;
     }
 
     private JudgeInfoMessageEnum getJudgeInfoMessageEnum(String message) {

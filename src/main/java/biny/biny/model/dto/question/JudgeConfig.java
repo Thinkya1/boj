@@ -1,5 +1,6 @@
 package biny.biny.model.dto.question;
 
+import biny.biny.config.SpjConfig;
 import lombok.Data;
 
 /**
@@ -22,4 +23,9 @@ public class JudgeConfig {
      * 堆栈限制（KB）
      */
     private Long stackLimit;
+
+    /**
+     * SPJ 配置（可选）
+     */
+    private SpjConfig spj;
 }

@@ -18,6 +18,8 @@ public class QuestionVO implements Serializable {
 
     private Integer questionNumber;
 
+    private Integer difficulty;
+
     private String title;
 
     private String content;

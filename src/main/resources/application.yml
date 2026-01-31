@@ -108,7 +108,7 @@ ai:
     max-history-messages: 10
     temperature: 0.2
 spj:
-  enabled: false
+  enabled: true
   checker-source: scripts/spj/checker.cpp
   checker-binary: scripts/spj/checker
   compile-timeout-ms: 10000

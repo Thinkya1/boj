@@ -29,6 +29,7 @@ create table if not exists question
 (
     id             bigint auto_increment comment 'id' primary key,
     questionNumber int                                not null comment '题号',
+    difficulty     tinyint  default 1                 not null comment '难度（1-简单 2-中等 3-困难）',
     title          varchar(512)                       null comment '标题',
     content        text                               null comment '内容',
     tags           varchar(1024)                      null comment '标签列表（json数组）',

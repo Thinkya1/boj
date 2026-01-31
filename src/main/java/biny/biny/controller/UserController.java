@@ -17,6 +17,7 @@ import biny.biny.model.dto.user.UserRegisterRequest;
 import biny.biny.model.dto.user.UserUpdateMyRequest;
 import biny.biny.model.dto.user.UserUpdateRequest;
 import biny.biny.model.entity.User;
+import biny.biny.model.enums.UserRoleEnum;
 import biny.biny.model.vo.LoginUserVO;
 import biny.biny.model.vo.UserVO;
 import biny.biny.service.UserService;
@@ -164,6 +165,10 @@ public class UserController {
         if (userAddRequest == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
+        String userRole = userAddRequest.getUserRole();
+        if (StringUtils.isNotBlank(userRole) && UserRoleEnum.getEnumByValue(userRole) == null) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "用户角色非法");
+        }
         User user = new User();
         BeanUtils.copyProperties(userAddRequest, user);
         boolean result = userService.save(user);
@@ -201,6 +206,10 @@ public class UserController {
             HttpServletRequest request) {
         if (userUpdateRequest == null || userUpdateRequest.getId() == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
+        }
+        String userRole = userUpdateRequest.getUserRole();
+        if (StringUtils.isNotBlank(userRole) && UserRoleEnum.getEnumByValue(userRole) == null) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "用户角色非法");
         }
         User user = new User();
         BeanUtils.copyProperties(userUpdateRequest, user);

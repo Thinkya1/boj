@@ -19,6 +19,11 @@ public class QuestionAddRequest implements Serializable {
     private String title;
 
     /**
+     * 难度（1-简单 2-中等 3-困难）
+     */
+    private Integer difficulty;
+
+    /**
      * 内容
      */
     private String content;
