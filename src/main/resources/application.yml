@@ -107,3 +107,9 @@ ai:
     max-input-chars: 12000
     max-history-messages: 10
     temperature: 0.2
+spj:
+  enabled: false
+  checker-source: scripts/spj/checker.cpp
+  checker-binary: scripts/spj/checker
+  compile-timeout-ms: 10000
+  run-timeout-ms: 2000
