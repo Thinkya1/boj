@@ -1,0 +1,147 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: boj-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-boj}
+      MYSQL_USER: ${MYSQL_USER:-boj}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      TZ: Asia/Shanghai
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./sql/create_table.sql:/docker-entrypoint-initdb.d/01_create_table.sql:ro
+    ports:
+      - "127.0.0.1:3306:3306"
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p\"$${MYSQL_ROOT_PASSWORD}\" --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    container_name: boj-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD}"]
+    volumes:
+      - redis_data:/data
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 30
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: boj-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+      RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST:-/}
+    ports:
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672"
+    healthcheck:
+      test: ["CMD-SHELL", "rabbitmq-diagnostics -q ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  # 可选：如果你需要帖子 ES 搜索，把 profile 打开即可：
+  # docker compose --profile search up -d
+  elasticsearch:
+    image: elasticsearch:7.17.18
+    container_name: boj-elasticsearch
+    restart: unless-stopped
+    profiles: ["search"]
+    environment:
+      discovery.type: single-node
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+      xpack.security.enabled: "false"
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    ports:
+      - "127.0.0.1:9200:9200"
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: boj-backend
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      TZ: Asia/Shanghai
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+      SERVER_PORT: ${SERVER_PORT:-8101}
+
+      # 数据库 / 缓存 / MQ
+      DB_URL: ${DB_URL:-jdbc:mysql://mysql:3306/boj?useSSL=false&useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai}
+      DB_USERNAME: ${DB_USERNAME:-boj}
+      DB_PASSWORD: ${DB_PASSWORD}
+
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+
+      RABBITMQ_HOST: ${RABBITMQ_HOST:-rabbitmq}
+      RABBITMQ_PORT: ${RABBITMQ_PORT:-5672}
+      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
+      RABBITMQ_VHOST: ${RABBITMQ_VHOST:-/}
+
+      # ES（如果你启用了 search profile）
+      ELASTICSEARCH_URIS: ${ELASTICSEARCH_URIS:-http://elasticsearch:9200}
+      ELASTICSEARCH_USERNAME: ${ELASTICSEARCH_USERNAME:-}
+      ELASTICSEARCH_PASSWORD: ${ELASTICSEARCH_PASSWORD:-}
+
+      # AI（可选）
+      AI_CHAT_ENABLED: ${AI_CHAT_ENABLED:-false}
+      AI_CHAT_API_KEY: ${AI_CHAT_API_KEY:-}
+      AI_CHAT_MODEL: ${AI_CHAT_MODEL:-deepseek-chat}
+      AI_CHAT_BASE_URL: ${AI_CHAT_BASE_URL:-https://api.deepseek.com/v1}
+
+      # SPJ（可选）
+      SPJ_ENABLED: ${SPJ_ENABLED:-true}
+
+      # 微信 / COS（可选）
+      WX_MP_TOKEN: ${WX_MP_TOKEN:-}
+      WX_MP_AES_KEY: ${WX_MP_AES_KEY:-}
+      WX_MP_APP_ID: ${WX_MP_APP_ID:-}
+      WX_MP_SECRET: ${WX_MP_SECRET:-}
+      WX_OPEN_APP_ID: ${WX_OPEN_APP_ID:-}
+      WX_OPEN_APP_SECRET: ${WX_OPEN_APP_SECRET:-}
+
+      COS_ACCESS_KEY: ${COS_ACCESS_KEY:-}
+      COS_SECRET_KEY: ${COS_SECRET_KEY:-}
+      COS_REGION: ${COS_REGION:-}
+      COS_BUCKET: ${COS_BUCKET:-}
+
+      # 代码沙箱（example / remote）
+      CODESANDBOX_TYPE: ${CODESANDBOX_TYPE:-example}
+      CODESANDBOX_REMOTE_URL: ${CODESANDBOX_REMOTE_URL:-http://boj-sandbox:8099/executeCode}
+      CODESANDBOX_REMOTE_AUTH_HEADER: ${CODESANDBOX_REMOTE_AUTH_HEADER:-auth}
+      CODESANDBOX_REMOTE_AUTH_SECRET: ${CODESANDBOX_REMOTE_AUTH_SECRET:-}
+    ports:
+      - "8101:8101"
+    volumes:
+      - ./config:/app/config:ro
+
+volumes:
+  mysql_data:
+  redis_data:
+  es_data:

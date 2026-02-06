@@ -1,0 +1,14 @@
+.git
+.idea
+target
+frontend
+
+.env
+.env.*
+
+users.csv
+config/application-prod.yml
+
+*.iml
+*.ipr
+*.iws

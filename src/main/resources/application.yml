@@ -3,9 +3,9 @@
 spring:
   application:
     name: yuoj-backend
-  # 默认 dev 环境
+  # 默认 prod 环境
   profiles:
-    active: dev
+    active: prod
   # 支持 swagger3
   mvc:
     pathmatch:
@@ -18,28 +18,28 @@ spring:
   # 数据库配置
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://localhost:3306/boj
-    username: root
-    password: 123456
+    url: ${DB_URL:jdbc:mysql://localhost:3306/boj}
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:}
   rabbitmq:
-    host: localhost
-    port: 5672
-    username: admin
-    password: admin123
-    virtual-host: /
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:admin}
+    password: ${RABBITMQ_PASSWORD:}
+    virtual-host: ${RABBITMQ_VHOST:/}
   # Redis 配置
   redis:
-    database: 1
-    host: localhost
-    port: 6379
-    timeout: 5000
-    password: 123456
+    database: ${REDIS_DATABASE:1}
+    host: ${REDIS_HOST:localhost}
+    port: ${REDIS_PORT:6379}
+    timeout: ${REDIS_TIMEOUT_MS:5000}
+    password: ${REDIS_PASSWORD:}
   # Elasticsearch 配置
   # todo 需替换配置，然后取消注释
 #  elasticsearch:
-#    uris: http://localhost:9200
-#    username: root
-#    password: 123456
+#    uris: ${ELASTICSEARCH_URIS:http://localhost:9200}
+#    username: ${ELASTICSEARCH_USERNAME:}
+#    password: ${ELASTICSEARCH_PASSWORD:}
   # 文件上传
   servlet:
     multipart:
@@ -68,10 +68,10 @@ wx:
   # 微信公众平台
   # todo 需替换配置
   mp:
-    token: xxx
-    aesKey: xxx
-    appId: xxx
-    secret: xxx
+    token: ${WX_MP_TOKEN:}
+    aesKey: ${WX_MP_AES_KEY:}
+    appId: ${WX_MP_APP_ID:}
+    secret: ${WX_MP_SECRET:}
     config-storage:
       http-client-type: HttpClient
       key-prefix: wx
@@ -82,34 +82,34 @@ wx:
   # 微信开放平台
   # todo 需替换配置
   open:
-    appId: xxx
-    appSecret: xxx
+    appId: ${WX_OPEN_APP_ID:}
+    appSecret: ${WX_OPEN_APP_SECRET:}
 # 对象存储
 # todo 需替换配置
 cos:
   client:
-    accessKey: xxx
-    secretKey: xxx
-    region: xxx
-    bucket: xxx
+    accessKey: ${COS_ACCESS_KEY:}
+    secretKey: ${COS_SECRET_KEY:}
+    region: ${COS_REGION:}
+    bucket: ${COS_BUCKET:}
 # 代码沙箱配置
 codesandbox:
-  type: remote
+  type: ${CODESANDBOX_TYPE:remote}
 ai:
   chat:
-    enabled: true
-    base-url: https://api.deepseek.com/v1
-    api-key: sk-6f224cf88df14013a55754b4b0cd17ce
-    model: deepseek-chat
-    timeout-ms: 15000
-    stream-timeout-ms: 60000
-    max-output-tokens: 800
-    max-input-chars: 12000
-    max-history-messages: 10
-    temperature: 0.2
+    enabled: ${AI_CHAT_ENABLED:false}
+    base-url: ${AI_CHAT_BASE_URL:https://api.deepseek.com/v1}
+    api-key: ${AI_CHAT_API_KEY:}
+    model: ${AI_CHAT_MODEL:deepseek-chat}
+    timeout-ms: ${AI_CHAT_TIMEOUT_MS:15000}
+    stream-timeout-ms: ${AI_CHAT_STREAM_TIMEOUT_MS:60000}
+    max-output-tokens: ${AI_CHAT_MAX_OUTPUT_TOKENS:800}
+    max-input-chars: ${AI_CHAT_MAX_INPUT_CHARS:12000}
+    max-history-messages: ${AI_CHAT_MAX_HISTORY_MESSAGES:10}
+    temperature: ${AI_CHAT_TEMPERATURE:0.2}
 spj:
-  enabled: true
-  checker-source: scripts/spj/checker.cpp
-  checker-binary: scripts/spj/checker
-  compile-timeout-ms: 10000
-  run-timeout-ms: 2000
+  enabled: ${SPJ_ENABLED:true}
+  checker-source: ${SPJ_CHECKER_SOURCE:scripts/spj/checker.cpp}
+  checker-binary: ${SPJ_CHECKER_BINARY:scripts/spj/checker}
+  compile-timeout-ms: ${SPJ_COMPILE_TIMEOUT_MS:10000}
+  run-timeout-ms: ${SPJ_RUN_TIMEOUT_MS:2000}

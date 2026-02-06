@@ -29,15 +29,22 @@
 -- 执行 sql/create_table.sql
 ```
 
-2. 修改配置（`src/main/resources/application.yml`）
-```yaml
-spring:
-  datasource:
-    url: jdbc:mysql://localhost:3306/boj
-    username: root
-    password: 123456
-codesandbox:
-  type: remote
+2. 配置环境变量（推荐使用 `.env` / Docker Compose）
+```env
+# MySQL
+DB_URL=jdbc:mysql://localhost:3306/boj
+DB_USERNAME=root
+DB_PASSWORD=change_me
+
+# 代码沙箱（example / remote）
+CODESANDBOX_TYPE=remote
+```
+
+2.1 Docker Compose 部署（推荐）
+```bash
+# 1) 编辑 .env（不要提交到 git）
+# 2) 编辑 src/main/resources/application-prod.yml（不要提交到 git）
+docker compose up -d --build
 ```
 
 3. 启动后端

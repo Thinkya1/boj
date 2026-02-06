@@ -2,6 +2,7 @@ package biny.biny.judge.codesandbox.impl;
 
 import cn.hutool.http.HttpUtil;
 import cn.hutool.json.JSONUtil;
+import cn.hutool.http.HttpRequest;
 import com.alibaba.excel.util.StringUtils;
 import biny.biny.common.ErrorCode;
 import biny.biny.exception.BusinessException;
@@ -14,20 +15,28 @@ import biny.biny.judge.codesandbox.model.ExecuteCodeResponse;
  */
 public class RemoteCodeSandbox implements CodeSandbox {
 
-    // 定义鉴权请求头和密钥
-    private static final String AUTH_REQUEST_HEADER = "auth";
+    private static final String DEFAULT_REMOTE_URL = "http://localhost:8099/executeCode";
 
-    private static final String AUTH_REQUEST_SECRET = "secretKey";
+    private static final String DEFAULT_AUTH_HEADER = "auth";
+
+    private static String envOrDefault(String key, String defaultValue) {
+        String value = System.getenv(key);
+        return StringUtils.isBlank(value) ? defaultValue : value;
+    }
 
 
     @Override
     public ExecuteCodeResponse executeCode(ExecuteCodeRequest executeCodeRequest) {
         System.out.println("远程代码沙箱");
-        String url = "http://localhost:8099/executeCode";
+        String url = envOrDefault("CODESANDBOX_REMOTE_URL", DEFAULT_REMOTE_URL);
+        String authHeader = envOrDefault("CODESANDBOX_REMOTE_AUTH_HEADER", DEFAULT_AUTH_HEADER);
+        String authSecret = envOrDefault("CODESANDBOX_REMOTE_AUTH_SECRET", "");
         String json = JSONUtil.toJsonStr(executeCodeRequest);
-        String responseStr = HttpUtil.createPost(url)
-                .header(AUTH_REQUEST_HEADER, AUTH_REQUEST_SECRET)
-                .body(json)
+        HttpRequest request = HttpUtil.createPost(url);
+        if (!StringUtils.isBlank(authSecret)) {
+            request.header(authHeader, authSecret);
+        }
+        String responseStr = request.body(json)
                 .execute()
                 .body();
         if (StringUtils.isBlank(responseStr)) {

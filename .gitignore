@@ -58,6 +58,17 @@ build/
 hs_err_pid*
 .DS_Store
 
+# Local env (do not commit secrets)
+.env
+.env.*
+
+# Production config (plaintext on server, never commit)
+config/application-prod.yml
+src/main/resources/application-prod.yml
+
+# Generated / local data
+users.csv
+
 ### Maven template
 target/
 pom.xml.tag
