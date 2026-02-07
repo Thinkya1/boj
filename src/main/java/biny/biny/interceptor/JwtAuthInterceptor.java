@@ -8,10 +8,14 @@ import biny.biny.model.entity.User;
 import biny.biny.model.enums.UserRoleEnum;
 import biny.biny.security.JwtTokenService;
 import biny.biny.service.UserService;
+import java.time.Duration;
 import java.time.Instant;
+import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseCookie;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
@@ -44,11 +48,31 @@ public class JwtAuthInterceptor implements HandlerInterceptor {
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
         UserContextHolder.clear();
+        String token = null;
         String authHeader = request.getHeader(AUTH_HEADER);
-        if (StringUtils.isBlank(authHeader) || !authHeader.startsWith(BEARER_PREFIX)) {
+        if (StringUtils.isNotBlank(authHeader)) {
+            String trimmed = authHeader.trim();
+            if (StringUtils.startsWithIgnoreCase(trimmed, BEARER_PREFIX)) {
+                token = trimmed.substring(BEARER_PREFIX.length()).trim();
+            } else if (!trimmed.contains(" ")) {
+                // 兼容：前端直接把 token 放到 Authorization，不带 Bearer
+                token = trimmed;
+            }
+        }
+        if (StringUtils.isBlank(token) && StringUtils.isNotBlank(jwtProperties.getAccessCookieName())) {
+            Cookie[] cookies = request.getCookies();
+            if (cookies != null) {
+                for (Cookie cookie : cookies) {
+                    if (jwtProperties.getAccessCookieName().equals(cookie.getName())) {
+                        token = cookie.getValue();
+                        break;
+                    }
+                }
+            }
+        }
+        if (StringUtils.isBlank(token)) {
             return true;
         }
-        String token = authHeader.substring(BEARER_PREFIX.length()).trim();
 
         JwtTokenService.AccessTokenPayload payload = jwtTokenService.parseAccessToken(token);
         Long userId = payload.getUserId();
@@ -74,6 +98,18 @@ public class JwtAuthInterceptor implements HandlerInterceptor {
             String newToken = jwtTokenService.renewAccessToken(userId, tokenVersion);
             response.setHeader(HEADER_NEW_ACCESS_TOKEN, newToken);
             response.setHeader(HEADER_NEW_ACCESS_TOKEN_EXPIRES_IN, String.valueOf(jwtTokenService.getAccessTtlSeconds()));
+            if (StringUtils.isNotBlank(jwtProperties.getAccessCookieName())) {
+                ResponseCookie.ResponseCookieBuilder accessCookieBuilder = ResponseCookie.from(jwtProperties.getAccessCookieName(), newToken)
+                        .httpOnly(true)
+                        .secure(jwtProperties.isRefreshCookieSecure())
+                        .path(jwtProperties.getRefreshCookiePath())
+                        .sameSite(jwtProperties.getRefreshCookieSameSite())
+                        .maxAge(Duration.ofSeconds(jwtTokenService.getAccessTtlSeconds()));
+                if (StringUtils.isNotBlank(jwtProperties.getRefreshCookieDomain())) {
+                    accessCookieBuilder.domain(jwtProperties.getRefreshCookieDomain());
+                }
+                response.addHeader(HttpHeaders.SET_COOKIE, accessCookieBuilder.build().toString());
+            }
         }
         return true;
     }
@@ -83,4 +119,3 @@ public class JwtAuthInterceptor implements HandlerInterceptor {
         UserContextHolder.clear();
     }
 }
-

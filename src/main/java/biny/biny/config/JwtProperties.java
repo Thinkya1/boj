@@ -48,6 +48,11 @@ public class JwtProperties {
     private String refreshCookieName = "refresh_token";
 
     /**
+     * Access Token Cookie 名称（兼容不传 Authorization 的旧前端）
+     */
+    private String accessCookieName = "access_token";
+
+    /**
      * Refresh Token Cookie Path
      */
     private String refreshCookiePath = "/";
@@ -67,4 +72,3 @@ public class JwtProperties {
      */
     private String refreshCookieSameSite = "Lax";
 }
-

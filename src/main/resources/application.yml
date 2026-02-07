@@ -123,6 +123,7 @@ jwt:
   refresh-ttl-seconds: ${JWT_REFRESH_TTL_SECONDS:1209600}
   renew-window-seconds: ${JWT_RENEW_WINDOW_SECONDS:300}
   refresh-cookie-name: ${JWT_REFRESH_COOKIE_NAME:refresh_token}
+  access-cookie-name: ${JWT_ACCESS_COOKIE_NAME:access_token}
   refresh-cookie-path: ${JWT_REFRESH_COOKIE_PATH:/}
   refresh-cookie-domain: ${JWT_REFRESH_COOKIE_DOMAIN:}
   refresh-cookie-secure: ${JWT_REFRESH_COOKIE_SECURE:false}

@@ -99,7 +99,7 @@ public class UserController {
      * @return
      */
     @PostMapping("/login")
-    public BaseResponse<LoginResultVO> userLogin(@RequestBody UserLoginRequest userLoginRequest,
+    public BaseResponse<LoginUserVO> userLogin(@RequestBody UserLoginRequest userLoginRequest,
             HttpServletResponse response) {
         if (userLoginRequest == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
@@ -124,15 +124,33 @@ public class UserController {
             cookieBuilder.domain(jwtProperties.getRefreshCookieDomain());
         }
         response.addHeader(HttpHeaders.SET_COOKIE, cookieBuilder.build().toString());
-        loginResultVO.setRefreshToken(null);
-        return ResultUtils.success(loginResultVO);
+
+        // 兼容旧前端：把 Access Token 也写入 HttpOnly Cookie（无需前端加 Authorization）
+        if (StringUtils.isNotBlank(jwtProperties.getAccessCookieName())) {
+            ResponseCookie.ResponseCookieBuilder accessCookieBuilder = ResponseCookie.from(jwtProperties.getAccessCookieName(), loginResultVO.getAccessToken())
+                    .httpOnly(true)
+                    .secure(jwtProperties.isRefreshCookieSecure())
+                    .path(jwtProperties.getRefreshCookiePath())
+                    .sameSite(jwtProperties.getRefreshCookieSameSite())
+                    .maxAge(Duration.ofSeconds(loginResultVO.getExpiresInSeconds()));
+            if (StringUtils.isNotBlank(jwtProperties.getRefreshCookieDomain())) {
+                accessCookieBuilder.domain(jwtProperties.getRefreshCookieDomain());
+            }
+            response.addHeader(HttpHeaders.SET_COOKIE, accessCookieBuilder.build().toString());
+        }
+
+        // 新前端可直接读 header 更新本地 token
+        response.setHeader("X-New-Access-Token", loginResultVO.getAccessToken());
+        response.setHeader("X-New-Access-Token-Expires-In", String.valueOf(loginResultVO.getExpiresInSeconds()));
+
+        return ResultUtils.success(loginResultVO.getUser());
     }
 
     /**
      * 用户登录（微信开放平台）
      */
     @GetMapping("/login/wx_open")
-    public BaseResponse<LoginResultVO> userLoginByWxOpen(HttpServletRequest request, HttpServletResponse response,
+    public BaseResponse<LoginUserVO> userLoginByWxOpen(HttpServletRequest request, HttpServletResponse response,
             @RequestParam("code") String code) {
         WxOAuth2AccessToken accessToken;
         try {
@@ -159,8 +177,23 @@ public class UserController {
                 cookieBuilder.domain(jwtProperties.getRefreshCookieDomain());
             }
             response.addHeader(HttpHeaders.SET_COOKIE, cookieBuilder.build().toString());
-            loginResultVO.setRefreshToken(null);
-            return ResultUtils.success(loginResultVO);
+
+            if (StringUtils.isNotBlank(jwtProperties.getAccessCookieName())) {
+                ResponseCookie.ResponseCookieBuilder accessCookieBuilder = ResponseCookie.from(jwtProperties.getAccessCookieName(), loginResultVO.getAccessToken())
+                        .httpOnly(true)
+                        .secure(jwtProperties.isRefreshCookieSecure())
+                        .path(jwtProperties.getRefreshCookiePath())
+                        .sameSite(jwtProperties.getRefreshCookieSameSite())
+                        .maxAge(Duration.ofSeconds(loginResultVO.getExpiresInSeconds()));
+                if (StringUtils.isNotBlank(jwtProperties.getRefreshCookieDomain())) {
+                    accessCookieBuilder.domain(jwtProperties.getRefreshCookieDomain());
+                }
+                response.addHeader(HttpHeaders.SET_COOKIE, accessCookieBuilder.build().toString());
+            }
+
+            response.setHeader("X-New-Access-Token", loginResultVO.getAccessToken());
+            response.setHeader("X-New-Access-Token-Expires-In", String.valueOf(loginResultVO.getExpiresInSeconds()));
+            return ResultUtils.success(loginResultVO.getUser());
         } catch (Exception e) {
             log.error("userLoginByWxOpen error", e);
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "登录失败，系统错误");
@@ -189,6 +222,18 @@ public class UserController {
             cookieBuilder.domain(jwtProperties.getRefreshCookieDomain());
         }
         response.addHeader(HttpHeaders.SET_COOKIE, cookieBuilder.build().toString());
+        if (StringUtils.isNotBlank(jwtProperties.getAccessCookieName())) {
+            ResponseCookie.ResponseCookieBuilder accessCookieBuilder = ResponseCookie.from(jwtProperties.getAccessCookieName(), "")
+                    .httpOnly(true)
+                    .secure(jwtProperties.isRefreshCookieSecure())
+                    .path(jwtProperties.getRefreshCookiePath())
+                    .sameSite(jwtProperties.getRefreshCookieSameSite())
+                    .maxAge(Duration.ZERO);
+            if (StringUtils.isNotBlank(jwtProperties.getRefreshCookieDomain())) {
+                accessCookieBuilder.domain(jwtProperties.getRefreshCookieDomain());
+            }
+            response.addHeader(HttpHeaders.SET_COOKIE, accessCookieBuilder.build().toString());
+        }
         return ResultUtils.success(result);
     }
 
@@ -229,6 +274,21 @@ public class UserController {
         TokenRefreshVO tokenRefreshVO = new TokenRefreshVO();
         tokenRefreshVO.setAccessToken(tokenPair.getAccessToken());
         tokenRefreshVO.setExpiresInSeconds(tokenPair.getAccessExpiresInSeconds());
+
+        if (StringUtils.isNotBlank(jwtProperties.getAccessCookieName())) {
+            ResponseCookie.ResponseCookieBuilder accessCookieBuilder = ResponseCookie.from(jwtProperties.getAccessCookieName(), tokenPair.getAccessToken())
+                    .httpOnly(true)
+                    .secure(jwtProperties.isRefreshCookieSecure())
+                    .path(jwtProperties.getRefreshCookiePath())
+                    .sameSite(jwtProperties.getRefreshCookieSameSite())
+                    .maxAge(Duration.ofSeconds(tokenPair.getAccessExpiresInSeconds()));
+            if (StringUtils.isNotBlank(jwtProperties.getRefreshCookieDomain())) {
+                accessCookieBuilder.domain(jwtProperties.getRefreshCookieDomain());
+            }
+            response.addHeader(HttpHeaders.SET_COOKIE, accessCookieBuilder.build().toString());
+        }
+        response.setHeader("X-New-Access-Token", tokenPair.getAccessToken());
+        response.setHeader("X-New-Access-Token-Expires-In", String.valueOf(tokenPair.getAccessExpiresInSeconds()));
         return ResultUtils.success(tokenRefreshVO);
     }
 
