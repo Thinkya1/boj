@@ -69,6 +69,11 @@ src/main/resources/application-prod.yml
 # Generated / local data
 users.csv
 
+# Local benchmark / load test artifacts (do not commit)
+scripts/create_users.py
+scripts/jmeter_question_submit.jmx
+scripts/HTTP*.jmx
+
 ### Maven template
 target/
 pom.xml.tag
