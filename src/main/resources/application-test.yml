@@ -1,32 +1,35 @@
-# 测试配置文件
+# 测试配置文件（仅用于本地/CI 测试，请勿在此提交明文密钥）
 # @author biny
+
 server:
   port: 8101
+
 spring:
-  # 数据库配置
-  # todo 需替换配置
+  # 数据库配置（可通过环境变量覆盖）
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
     url: ${DB_URL:jdbc:mysql://localhost:3306/boj}
     username: ${DB_USERNAME:root}
     password: ${DB_PASSWORD:}
+
   rabbitmq:
     host: ${RABBITMQ_HOST:localhost}
     port: ${RABBITMQ_PORT:5672}
     username: ${RABBITMQ_USERNAME:guest}
     password: ${RABBITMQ_PASSWORD:}
     virtual-host: ${RABBITMQ_VHOST:/}
-  # Redis 配置
-  # todo 需替换配置
+
+  # Redis 配置（可通过环境变量覆盖）
   redis:
     database: ${REDIS_DATABASE:1}
     host: ${REDIS_HOST:localhost}
     port: ${REDIS_PORT:6379}
     timeout: ${REDIS_TIMEOUT_MS:5000}
     password: ${REDIS_PASSWORD:}
-  # Elasticsearch 配置
-  # todo 需替换配置
+
+  # Elasticsearch 配置（可选）
   elasticsearch:
     uris: ${ELASTICSEARCH_URIS:http://localhost:9200}
     username: ${ELASTICSEARCH_USERNAME:}
     password: ${ELASTICSEARCH_PASSWORD:}
+

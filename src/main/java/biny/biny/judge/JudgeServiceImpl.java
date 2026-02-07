@@ -110,6 +110,45 @@ public class JudgeServiceImpl implements JudgeService {
             }
             normalizeMemoryUnit(executeCodeResponse);
 
+            // 4.1) 沙箱未正常执行（编译错误 / 运行错误 / 系统错误）直接落库失败，不走判题策略
+            Integer executeStatus = executeCodeResponse.getStatus();
+            if (!Integer.valueOf(1).equals(executeStatus)) {
+                JudgeInfo errorInfo = executeCodeResponse.getJudgeInfo();
+                if (errorInfo == null) {
+                    errorInfo = new JudgeInfo();
+                    executeCodeResponse.setJudgeInfo(errorInfo);
+                }
+                String sandboxMessage = executeCodeResponse.getMessage();
+                String judgeMessage = "System Error";
+                if (Integer.valueOf(3).equals(executeStatus)) {
+                    judgeMessage = "Runtime Error";
+                } else if (Integer.valueOf(2).equals(executeStatus)) {
+                    String lower = sandboxMessage == null ? "" : sandboxMessage.toLowerCase();
+                    boolean looksLikeCompileError = lower.contains("error:")
+                            && (lower.contains(".java") || lower.contains(".c") || lower.contains(".cpp"));
+                    if (looksLikeCompileError) {
+                        judgeMessage = "Compile Error";
+                    }
+                }
+                errorInfo.setMessage(judgeMessage);
+
+                JudgeInfoMessageEnum messageEnum = getJudgeInfoMessageEnum(judgeMessage);
+                String result = getResultByMessageEnum(messageEnum);
+                QuestionSubmit finishUpdate = new QuestionSubmit();
+                finishUpdate.setStatus(QuestionSubmitStatusEnum.FAILED.getValue());
+                finishUpdate.setResult(result);
+                finishUpdate.setJudgeInfo(JSONUtil.toJsonStr(errorInfo));
+                LambdaUpdateWrapper<QuestionSubmit> finishWrapper = new LambdaUpdateWrapper<>();
+                finishWrapper.eq(QuestionSubmit::getId, questionSubmitId)
+                        .eq(QuestionSubmit::getStatus, QuestionSubmitStatusEnum.RUNNING.getValue())
+                        .eq(QuestionSubmit::getIsDelete, 0);
+                update = questionSubmitService.update(finishUpdate, finishWrapper);
+                if (!update) {
+                    throw new BusinessException(ErrorCode.OPERATION_ERROR, "判题结果更新失败");
+                }
+                return questionSubmitService.getById(questionSubmitId);
+            }
+
             // 5) 判题策略生成结果
             JudgeInfo judgeInfo = buildJudgeInfo(executeCodeResponse, question, questionSubmit, inputList, judgeCaseList);
 
@@ -145,7 +184,7 @@ public class JudgeServiceImpl implements JudgeService {
         } catch (Exception e) {
             log.error("判题执行异常，提交id={}", questionSubmitId, e);
             JudgeInfo errorInfo = new JudgeInfo();
-            errorInfo.setMessage("系统异常");
+            errorInfo.setMessage("System Error");
             QuestionSubmit failUpdate = new QuestionSubmit();
             failUpdate.setStatus(QuestionSubmitStatusEnum.FAILED.getValue());
             failUpdate.setResult("SE");//System Error
@@ -155,7 +194,7 @@ public class JudgeServiceImpl implements JudgeService {
                     .eq(QuestionSubmit::getStatus, QuestionSubmitStatusEnum.RUNNING.getValue())
                     .eq(QuestionSubmit::getIsDelete, 0);
             questionSubmitService.update(failUpdate, failWrapper);
-            throw e;
+            return questionSubmitService.getById(questionSubmitId);
         }
     }
 

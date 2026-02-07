@@ -1,12 +1,14 @@
 package biny.biny.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import biny.biny.common.ErrorCode;
 import biny.biny.constant.CommonConstant;
 import biny.biny.constant.MqConstant;
 import biny.biny.exception.BusinessException;
+import biny.biny.judge.codesandbox.model.JudgeInfo;
 import biny.biny.mapper.QuestionSubmitMapper;
 import biny.biny.model.dto.questionsubmit.QuestionSubmitAddRequest;
 import biny.biny.model.dto.questionsubmit.QuestionSubmitQueryRequest;
@@ -21,6 +23,7 @@ import biny.biny.service.QuestionService;
 import biny.biny.service.QuestionSubmitService;
 import biny.biny.service.UserService;
 import biny.biny.utils.SqlUtils;
+import cn.hutool.json.JSONUtil;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -108,6 +111,18 @@ public class QuestionSubmitServiceImpl extends ServiceImpl<QuestionSubmitMapper,
             rabbitTemplate.convertAndSend(MqConstant.JUDGE_QUEUE, String.valueOf(questionSubmitId));
         } catch (Exception e) {
             log.error("判题消息发送异常，submitId={}", questionSubmitId, e);
+            // 避免消息未入队导致记录一直处于 WAITING（前端一直“判题中/等待判题”）
+            JudgeInfo errorInfo = new JudgeInfo();
+            errorInfo.setMessage("System Error");
+            QuestionSubmit failUpdate = new QuestionSubmit();
+            failUpdate.setStatus(QuestionSubmitStatusEnum.FAILED.getValue());
+            failUpdate.setResult("SE");
+            failUpdate.setJudgeInfo(JSONUtil.toJsonStr(errorInfo));
+            LambdaUpdateWrapper<QuestionSubmit> wrapper = new LambdaUpdateWrapper<>();
+            wrapper.eq(QuestionSubmit::getId, questionSubmitId)
+                    .eq(QuestionSubmit::getStatus, QuestionSubmitStatusEnum.WAITING.getValue())
+                    .eq(QuestionSubmit::getIsDelete, 0);
+            this.update(failUpdate, wrapper);
         }
         return questionSubmitId;
     }
