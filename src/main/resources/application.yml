@@ -113,3 +113,17 @@ spj:
   checker-binary: ${SPJ_CHECKER_BINARY:scripts/spj/checker}
   compile-timeout-ms: ${SPJ_COMPILE_TIMEOUT_MS:10000}
   run-timeout-ms: ${SPJ_RUN_TIMEOUT_MS:2000}
+
+jwt:
+  issuer: ${JWT_ISSUER:yuoj-backend}
+  # HS256 密钥建议 >= 32 字符，生产环境请在 application-prod.yml 配置明文（不提交到 git）
+  access-secret: ${JWT_ACCESS_SECRET:}
+  refresh-secret: ${JWT_REFRESH_SECRET:}
+  access-ttl-seconds: ${JWT_ACCESS_TTL_SECONDS:1800}
+  refresh-ttl-seconds: ${JWT_REFRESH_TTL_SECONDS:1209600}
+  renew-window-seconds: ${JWT_RENEW_WINDOW_SECONDS:300}
+  refresh-cookie-name: ${JWT_REFRESH_COOKIE_NAME:refresh_token}
+  refresh-cookie-path: ${JWT_REFRESH_COOKIE_PATH:/}
+  refresh-cookie-domain: ${JWT_REFRESH_COOKIE_DOMAIN:}
+  refresh-cookie-secure: ${JWT_REFRESH_COOKIE_SECURE:false}
+  refresh-cookie-same-site: ${JWT_REFRESH_COOKIE_SAME_SITE:Lax}

@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.IService;
 import biny.biny.model.dto.user.UserQueryRequest;
 import biny.biny.model.entity.User;
+import biny.biny.model.vo.LoginResultVO;
 import biny.biny.model.vo.LoginUserVO;
 import biny.biny.model.vo.UserVO;
 import java.util.List;
@@ -35,7 +36,7 @@ public interface UserService extends IService<User> {
      * @param request
      * @return 脱敏后的用户信息
      */
-    LoginUserVO userLogin(String userAccount, String userPassword, HttpServletRequest request);
+    LoginResultVO userLogin(String userAccount, String userPassword);
 
     /**
      * 用户登录（微信开放平台）
@@ -44,7 +45,7 @@ public interface UserService extends IService<User> {
      * @param request
      * @return 脱敏后的用户信息
      */
-    LoginUserVO userLoginByMpOpen(WxOAuth2UserInfo wxOAuth2UserInfo, HttpServletRequest request);
+    LoginResultVO userLoginByMpOpen(WxOAuth2UserInfo wxOAuth2UserInfo);
 
     /**
      * 获取当前登录用户

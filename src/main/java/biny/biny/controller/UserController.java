@@ -6,6 +6,7 @@ import biny.biny.common.BaseResponse;
 import biny.biny.common.DeleteRequest;
 import biny.biny.common.ErrorCode;
 import biny.biny.common.ResultUtils;
+import biny.biny.config.JwtProperties;
 import biny.biny.config.WxOpenConfig;
 import biny.biny.constant.UserConstant;
 import biny.biny.exception.BusinessException;
@@ -18,11 +19,16 @@ import biny.biny.model.dto.user.UserUpdateMyRequest;
 import biny.biny.model.dto.user.UserUpdateRequest;
 import biny.biny.model.entity.User;
 import biny.biny.model.enums.UserRoleEnum;
+import biny.biny.model.vo.LoginResultVO;
 import biny.biny.model.vo.LoginUserVO;
+import biny.biny.model.vo.TokenRefreshVO;
 import biny.biny.model.vo.UserVO;
+import biny.biny.security.JwtTokenService;
 import biny.biny.service.UserService;
+import java.time.Duration;
 import java.util.List;
 import javax.annotation.Resource;
+import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
@@ -31,6 +37,8 @@ import me.chanjar.weixin.common.bean.oauth2.WxOAuth2AccessToken;
 import me.chanjar.weixin.mp.api.WxMpService;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.BeanUtils;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseCookie;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -53,6 +61,12 @@ public class UserController {
 
     @Resource
     private WxOpenConfig wxOpenConfig;
+
+    @Resource
+    private JwtProperties jwtProperties;
+
+    @Resource
+    private JwtTokenService jwtTokenService;
 
     // region 登录相关
 
@@ -85,7 +99,8 @@ public class UserController {
      * @return
      */
     @PostMapping("/login")
-    public BaseResponse<LoginUserVO> userLogin(@RequestBody UserLoginRequest userLoginRequest, HttpServletRequest request) {
+    public BaseResponse<LoginResultVO> userLogin(@RequestBody UserLoginRequest userLoginRequest,
+            HttpServletResponse response) {
         if (userLoginRequest == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
@@ -94,15 +109,30 @@ public class UserController {
         if (StringUtils.isAnyBlank(userAccount, userPassword)) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
-        LoginUserVO loginUserVO = userService.userLogin(userAccount, userPassword, request);
-        return ResultUtils.success(loginUserVO);
+        LoginResultVO loginResultVO = userService.userLogin(userAccount, userPassword);
+        String refreshToken = loginResultVO.getRefreshToken();
+        if (StringUtils.isBlank(refreshToken)) {
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "refresh token 生成失败");
+        }
+        ResponseCookie.ResponseCookieBuilder cookieBuilder = ResponseCookie.from(jwtProperties.getRefreshCookieName(), refreshToken)
+                .httpOnly(true)
+                .secure(jwtProperties.isRefreshCookieSecure())
+                .path(jwtProperties.getRefreshCookiePath())
+                .sameSite(jwtProperties.getRefreshCookieSameSite())
+                .maxAge(Duration.ofSeconds(jwtProperties.getRefreshTtlSeconds()));
+        if (StringUtils.isNotBlank(jwtProperties.getRefreshCookieDomain())) {
+            cookieBuilder.domain(jwtProperties.getRefreshCookieDomain());
+        }
+        response.addHeader(HttpHeaders.SET_COOKIE, cookieBuilder.build().toString());
+        loginResultVO.setRefreshToken(null);
+        return ResultUtils.success(loginResultVO);
     }
 
     /**
      * 用户登录（微信开放平台）
      */
     @GetMapping("/login/wx_open")
-    public BaseResponse<LoginUserVO> userLoginByWxOpen(HttpServletRequest request, HttpServletResponse response,
+    public BaseResponse<LoginResultVO> userLoginByWxOpen(HttpServletRequest request, HttpServletResponse response,
             @RequestParam("code") String code) {
         WxOAuth2AccessToken accessToken;
         try {
@@ -114,7 +144,23 @@ public class UserController {
             if (StringUtils.isAnyBlank(unionId, mpOpenId)) {
                 throw new BusinessException(ErrorCode.SYSTEM_ERROR, "登录失败，系统错误");
             }
-            return ResultUtils.success(userService.userLoginByMpOpen(userInfo, request));
+            LoginResultVO loginResultVO = userService.userLoginByMpOpen(userInfo);
+            String refreshToken = loginResultVO.getRefreshToken();
+            if (StringUtils.isBlank(refreshToken)) {
+                throw new BusinessException(ErrorCode.SYSTEM_ERROR, "refresh token 生成失败");
+            }
+            ResponseCookie.ResponseCookieBuilder cookieBuilder = ResponseCookie.from(jwtProperties.getRefreshCookieName(), refreshToken)
+                    .httpOnly(true)
+                    .secure(jwtProperties.isRefreshCookieSecure())
+                    .path(jwtProperties.getRefreshCookiePath())
+                    .sameSite(jwtProperties.getRefreshCookieSameSite())
+                    .maxAge(Duration.ofSeconds(jwtProperties.getRefreshTtlSeconds()));
+            if (StringUtils.isNotBlank(jwtProperties.getRefreshCookieDomain())) {
+                cookieBuilder.domain(jwtProperties.getRefreshCookieDomain());
+            }
+            response.addHeader(HttpHeaders.SET_COOKIE, cookieBuilder.build().toString());
+            loginResultVO.setRefreshToken(null);
+            return ResultUtils.success(loginResultVO);
         } catch (Exception e) {
             log.error("userLoginByWxOpen error", e);
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "登录失败，系统错误");
@@ -128,12 +174,62 @@ public class UserController {
      * @return
      */
     @PostMapping("/logout")
-    public BaseResponse<Boolean> userLogout(HttpServletRequest request) {
+    public BaseResponse<Boolean> userLogout(HttpServletRequest request, HttpServletResponse response) {
         if (request == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
         boolean result = userService.userLogout(request);
+        ResponseCookie.ResponseCookieBuilder cookieBuilder = ResponseCookie.from(jwtProperties.getRefreshCookieName(), "")
+                .httpOnly(true)
+                .secure(jwtProperties.isRefreshCookieSecure())
+                .path(jwtProperties.getRefreshCookiePath())
+                .sameSite(jwtProperties.getRefreshCookieSameSite())
+                .maxAge(Duration.ZERO);
+        if (StringUtils.isNotBlank(jwtProperties.getRefreshCookieDomain())) {
+            cookieBuilder.domain(jwtProperties.getRefreshCookieDomain());
+        }
+        response.addHeader(HttpHeaders.SET_COOKIE, cookieBuilder.build().toString());
         return ResultUtils.success(result);
+    }
+
+    /**
+     * 刷新 Access Token（使用 HttpOnly Refresh Token Cookie）
+     */
+    @PostMapping("/token/refresh")
+    public BaseResponse<TokenRefreshVO> refreshToken(HttpServletRequest request, HttpServletResponse response) {
+        if (request == null) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR);
+        }
+        String refreshToken = null;
+        Cookie[] cookies = request.getCookies();
+        if (cookies != null) {
+            for (Cookie cookie : cookies) {
+                if (jwtProperties.getRefreshCookieName().equals(cookie.getName())) {
+                    refreshToken = cookie.getValue();
+                    break;
+                }
+            }
+        }
+        if (StringUtils.isBlank(refreshToken)) {
+            throw new BusinessException(ErrorCode.NOT_LOGIN_ERROR);
+        }
+
+        JwtTokenService.TokenPair tokenPair = jwtTokenService.refresh(refreshToken);
+        ResponseCookie.ResponseCookieBuilder cookieBuilder = ResponseCookie.from(jwtProperties.getRefreshCookieName(), tokenPair.getRefreshToken())
+                .httpOnly(true)
+                .secure(jwtProperties.isRefreshCookieSecure())
+                .path(jwtProperties.getRefreshCookiePath())
+                .sameSite(jwtProperties.getRefreshCookieSameSite())
+                .maxAge(Duration.ofSeconds(jwtProperties.getRefreshTtlSeconds()));
+        if (StringUtils.isNotBlank(jwtProperties.getRefreshCookieDomain())) {
+            cookieBuilder.domain(jwtProperties.getRefreshCookieDomain());
+        }
+        response.addHeader(HttpHeaders.SET_COOKIE, cookieBuilder.build().toString());
+
+        TokenRefreshVO tokenRefreshVO = new TokenRefreshVO();
+        tokenRefreshVO.setAccessToken(tokenPair.getAccessToken());
+        tokenRefreshVO.setExpiresInSeconds(tokenPair.getAccessExpiresInSeconds());
+        return ResultUtils.success(tokenRefreshVO);
     }
 
     /**

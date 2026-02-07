@@ -6,6 +6,7 @@ import biny.biny.model.entity.Post;
 import javax.annotation.Resource;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.boot.test.context.SpringBootTest;
 
 /**
@@ -14,6 +15,7 @@ import org.springframework.boot.test.context.SpringBootTest;
  * @author biny
  */
 @SpringBootTest
+@EnabledIfEnvironmentVariable(named = "RUN_INTEGRATION_TESTS", matches = "true")
 class PostServiceTest {
 
     @Resource

@@ -1,26 +1,26 @@
 package biny.biny.service.impl;
 
-import static biny.biny.constant.UserConstant.USER_LOGIN_STATE;
-
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.CollectionUtils;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import biny.biny.common.ErrorCode;
 import biny.biny.constant.CommonConstant;
+import biny.biny.context.UserContextHolder;
 import biny.biny.exception.BusinessException;
 import biny.biny.mapper.UserMapper;
 import biny.biny.model.dto.user.UserQueryRequest;
 import biny.biny.model.entity.User;
 import biny.biny.model.enums.UserRoleEnum;
+import biny.biny.model.vo.LoginResultVO;
 import biny.biny.model.vo.LoginUserVO;
 import biny.biny.model.vo.UserVO;
+import biny.biny.security.JwtTokenService;
 import biny.biny.service.UserService;
 import biny.biny.utils.SqlUtils;
 import java.util.ArrayList;
-import java.util.Enumeration;
 import java.util.List;
 import java.util.stream.Collectors;
-import javax.servlet.http.Cookie;
+import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import me.chanjar.weixin.common.bean.WxOAuth2UserInfo;
@@ -42,6 +42,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
      * 盐值，混淆密码
      */
     private static final String SALT = "yupi";
+
+    @Resource
+    private JwtTokenService jwtTokenService;
 
     @Override
     public long userRegister(String userAccount, String userPassword, String checkPassword) {
@@ -82,7 +85,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     }
 
     @Override
-    public LoginUserVO userLogin(String userAccount, String userPassword, HttpServletRequest request) {
+    public LoginResultVO userLogin(String userAccount, String userPassword) {
         // 1. 校验
         if (StringUtils.isAnyBlank(userAccount, userPassword)) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "参数为空");
@@ -110,12 +113,17 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             throw new BusinessException(ErrorCode.FORBIDDEN_ERROR, "该用户已被封，禁止登录");
         }
         // 3. 记录用户的登录态
-        request.getSession().setAttribute(USER_LOGIN_STATE, user);
-        return this.getLoginUserVO(user);
+        JwtTokenService.TokenPair tokenPair = jwtTokenService.issueTokens(user.getId());
+        LoginResultVO loginResultVO = new LoginResultVO();
+        loginResultVO.setUser(this.getLoginUserVO(user));
+        loginResultVO.setAccessToken(tokenPair.getAccessToken());
+        loginResultVO.setExpiresInSeconds(tokenPair.getAccessExpiresInSeconds());
+        loginResultVO.setRefreshToken(tokenPair.getRefreshToken());
+        return loginResultVO;
     }
 
     @Override
-    public LoginUserVO userLoginByMpOpen(WxOAuth2UserInfo wxOAuth2UserInfo, HttpServletRequest request) {
+    public LoginResultVO userLoginByMpOpen(WxOAuth2UserInfo wxOAuth2UserInfo) {
         String unionId = wxOAuth2UserInfo.getUnionId();
         String mpOpenId = wxOAuth2UserInfo.getOpenid();
         // 单机锁
@@ -141,8 +149,13 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
                 }
             }
             // 记录用户的登录态
-            request.getSession().setAttribute(USER_LOGIN_STATE, user);
-            return getLoginUserVO(user);
+            JwtTokenService.TokenPair tokenPair = jwtTokenService.issueTokens(user.getId());
+            LoginResultVO loginResultVO = new LoginResultVO();
+            loginResultVO.setUser(this.getLoginUserVO(user));
+            loginResultVO.setAccessToken(tokenPair.getAccessToken());
+            loginResultVO.setExpiresInSeconds(tokenPair.getAccessExpiresInSeconds());
+            loginResultVO.setRefreshToken(tokenPair.getRefreshToken());
+            return loginResultVO;
         }
     }
 
@@ -155,8 +168,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     @Override
     public User getLoginUser(HttpServletRequest request) {
         // 先判断是否已登录
-        Object userObj = request.getSession().getAttribute(USER_LOGIN_STATE);
-        User currentUser = (User) userObj;
+        User currentUser = UserContextHolder.get();
         if (currentUser == null || currentUser.getId() == null) {
             throw new BusinessException(ErrorCode.NOT_LOGIN_ERROR);
         }
@@ -175,8 +187,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     @Override
     public User getLoginUserPermitNull(HttpServletRequest request) {
         // 先判断是否已登录
-        Object userObj = request.getSession().getAttribute(USER_LOGIN_STATE);
-        User currentUser = (User) userObj;
+        User currentUser = UserContextHolder.get();
         if (currentUser == null || currentUser.getId() == null) {
             return null;
         }
@@ -192,9 +203,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     @Override
     public boolean isAdmin(HttpServletRequest request) {
         // 仅管理员可查询
-        Object userObj = request.getSession().getAttribute(USER_LOGIN_STATE);
-        User user = (User) userObj;
-        return isAdmin(user);
+        return isAdmin(getLoginUserPermitNull(request));
     }
 
     @Override
@@ -209,11 +218,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
      */
     @Override
     public boolean userLogout(HttpServletRequest request) {
-        if (request.getSession().getAttribute(USER_LOGIN_STATE) == null) {
-            throw new BusinessException(ErrorCode.OPERATION_ERROR, "未登录");
-        }
-        // 移除登录态
-        request.getSession().removeAttribute(USER_LOGIN_STATE);
+        User loginUser = getLoginUser(request);
+        jwtTokenService.bumpTokenVersion(loginUser.getId());
         return true;
     }
 

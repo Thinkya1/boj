@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Optional;
 import javax.annotation.Resource;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -21,6 +22,7 @@ import org.springframework.data.domain.Sort;
  * @author biny
  */
 @SpringBootTest
+@EnabledIfEnvironmentVariable(named = "RUN_INTEGRATION_TESTS", matches = "true")
 public class PostEsDaoTest {
 
     @Resource
